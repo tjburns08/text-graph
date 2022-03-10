@@ -1,0 +1,44 @@
+CREATEA CONSTRAINT FOR (q:Question) REQUIRE q.name IS UNIQUE;
+
+LOAD CSV WITH HEADERS FROM "file:///curated_questions.csv" as line
+MERGE (q:Question {name:line.Question})
+SET q += line;
+
+LOAD CSV WITH HEADERS FROM "file:///questions_edgelist_dist_0.3.csv" as line
+MERGE (q1:Question {name:line.edge1})
+MERGE (q2:Question {name:line.edge2})
+MERGE (q1)-[r:BERT_RELATED]-(q2);
+
+CALL gds.graph.create(
+  'questions',            
+  'Question',             
+  'BERT_RELATED'               
+)
+YIELD
+  graphName AS graph, nodeProjection, nodeCount AS nodes, relationshipProjection, relationshipCount AS rels
+
+
+CALL gds.graph.create('questions', 'Question', {BERT_RELATED: {orientation: 'UNDIRECTED'}})
+
+CALL gds.degree.stream('questions')
+YIELD nodeId, score
+RETURN gds.util.asNode(nodeId).name AS name, score AS neighbors
+ORDER BY followers DESC, name DESC
+
+CALL gds.betweenness.stream('questions')
+YIELD nodeId, score
+RETURN gds.util.asNode(nodeId).name AS name, score
+ORDER BY score DESC		    
+
+// Works
+CALL gds.degree.write('questions', { writeProperty: 'degree' })
+YIELD centralityDistribution, nodePropertiesWritten
+RETURN centralityDistribution.min AS minimumScore, centralityDistribution.mean AS meanScore, nodePropertiesWritten
+
+// Bug
+CALL gds.betweenness.write('questions', { writeProperty: 'betweenness' })
+YIELD centralityDistribution, nodePropertiesWritten
+RETURN centralityDistribution.min AS minimumScore, centralityDistribution.mean AS meanScore, nodePropertiesWritten
+
+CALL gds.louvain.write('questions', { writeProperty: 'community' })
+YIELD communityCount, modularity, modularities
